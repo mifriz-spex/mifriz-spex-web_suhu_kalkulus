@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Detection - Kelompok 7</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap');
+        
+        body { 
+            font-family: 'Chakra Petch', sans-serif; 
+            background-color: #050b14; 
+            color: #94a3b8;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* --- STYLE UI --- */
+        .nav-btn {
+            border-bottom: 2px solid transparent;
+            color: #64748b;
+            transition: all 0.3s;
+            padding-bottom: 5px;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        .nav-btn.active {
+            color: #06b6d4;
+            border-bottom: 2px solid #06b6d4;
+            text-shadow: 0 0 10px rgba(6,182,212,0.4);
+        }
+        .nav-btn.hover { color: #cbd5e1; }
+
+        .hidden-page { display: none !important; }
+
+        .bg-grid {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(18, 16, 16, 0.95) 50%, rgba(0, 0, 0, 0.95) 50%), 
+                linear-gradient(90deg, rgba(6, 182, 212, 0.05) 1px, transparent 1px),
+                linear-gradient(rgba(6, 182, 212, 0.05) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            z-index: -1;
+        }
+
+        .panel {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid #1e293b;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+        }
+
+        .scenario-card { cursor: pointer; transition: all 0.3s; opacity: 0.6; }
+        .scenario-card:hover { opacity: 1; transform: translateY(-5px); }
+        .scenario-card.active-scenario { opacity: 1; border-color: #ffffff; background: rgba(30, 41, 59, 0.9); }
+
+        .math-box {
+            font-family: 'Courier New', monospace;
+            background: rgba(0,0,0,0.4);
+            border-left: 4px solid #eab308;
+            padding: 15px;
+            color: #e2e8f0;
+        }
+
+        /* OVERLAY CONNECTION LOST STYLE */
+        .clip-path-slanted { clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%); }
+        .glitch-text { position: relative; color: #ef4444; font-weight: 900; }
+        .glitch-text::before, .glitch-text::after { content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; }
+        .glitch-text::before { left: 2px; text-shadow: -1px 0 #00ffff; clip: rect(24px, 550px, 90px, 0); animation: glitch-anim-1 3s infinite linear alternate-reverse; }
+        .glitch-text::after { left: -2px; text-shadow: -1px 0 #ff00ff; clip: rect(85px, 550px, 140px, 0); animation: glitch-anim-2 2.5s infinite linear alternate-reverse; }
+        @keyframes glitch-anim-1 { 0% { clip: rect(20px, 9999px, 80px, 0); } 100% { clip: rect(50px, 9999px, 120px, 0); } }
+        @keyframes glitch-anim-2 { 0% { clip: rect(100px, 9999px, 150px, 0); } 100% { clip: rect(10px, 9999px, 60px, 0); } }
+
+        /* Alarm Animation */
+        @keyframes alarm-flash {
+            0%, 100% { box-shadow: inset 0 0 0 0 transparent; border-color: #ef4444; }
+            50% { box-shadow: inset 0 0 50px 10px rgba(239, 68, 68, 0.2); border-color: #fca5a5; }
+        }
+        .alarm-active { animation: alarm-flash 1s infinite; }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body id="mainBody" class="p-4 md:p-6 transition-all duration-300 relative">
+
+    <div class="bg-grid"></div>
+
+    <div id="offlineOverlay" class="fixed inset-0 z-[9999] hidden flex-col items-center justify-center text-center bg-black/95 backdrop-blur-sm">
+        <div class="text-9xl text-red-600 mb-6 animate-pulse filter drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">
+            <i class="fa-solid fa-link-slash"></i>
+        </div>
+        <h1 class="text-7xl font-bold text-red-500 mb-2 glitch-text tracking-widest" data-text="CONNECTION LOST">CONNECTION LOST</h1>
+        <p class="text-xl text-red-300 font-mono mb-10 tracking-widest border-t border-b border-red-900 py-2">ARDUINO DISCONNECTED // SYSTEM HALTED</p>
+        <button onclick="location.reload()" class="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500 px-10 py-4 font-bold text-xl transition-all duration-300 hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] clip-path-slanted cursor-pointer">
+            RESTART SYSTEM
+        </button>
+    </div>
+
+    <header class="fixed top-0 left-0 w-full z-50 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-6 py-3 flex flex-wrap justify-between items-end gap-4 shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-cyan-900/30 border border-cyan-500 rounded flex items-center justify-center text-cyan-400">
+                <i class="fa-solid fa-fire-flame-curved"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-white tracking-widest leading-none">KELOMPOK 7</h1>
+                <p class="text-[10px] text-slate-500 font-mono">CALCULUS PROJECT <span class="text-cyan-500 font-bold ml-1">v2.0</span></p>
+            </div>
+            
+            <button onclick="toggleModal('guideModal')" class="ml-2 md:ml-4 text-[10px] bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-600 px-3 py-1 font-bold uppercase tracking-wider transition-all hover:shadow-[0_0_10px_rgba(6,182,212,0.3)] hover:scale-105 active:scale-95">
+                <i class="fa-solid fa-book-open mr-1"></i> Panduan
+            </button>
+        </div>
+
+        <nav class="flex gap-6 text-sm font-bold tracking-wider overflow-x-auto pb-1 md:pb-0">
+            <button onclick="showPage('monitor')" id="btn-monitor" class="nav-btn active"><i class="fa-solid fa-chart-line mr-1"></i> MONITOR</button>
+            <button onclick="showPage('rumus')" id="btn-rumus" class="nav-btn"><i class="fa-solid fa-square-root-variable mr-1"></i> RUMUS</button>
+            <button onclick="showPage('kasus')" id="btn-kasus" class="nav-btn"><i class="fa-solid fa-industry mr-1"></i> CONTOH PENGGUNAAN</button>
+            <button onclick="showPage('tutorial')" id="btn-tutorial" class="nav-btn"><i class="fa-brands fa-youtube mr-1"></i> TUTORIAL</button>
+        </nav>
+
+        <button id="connectBtn" onclick="connectSerial()" class="bg-cyan-900/30 hover:bg-cyan-800/50 text-cyan-400 border border-cyan-500/50 px-5 py-2 font-bold transition-all hover:shadow-[0_0_15px_rgba(6,182,212,0.3)] group skew-x-[-10deg] active:scale-95 text-sm">
+            <span class="inline-block skew-x-[10deg] flex items-center gap-2">
+                <i class="fa-brands fa-usb"></i> <span id="btnText">HUBUNGKAN PERANGKAT</span>
+            </span>
+        </button>
+    </header>
+
+    <div class="h-24"></div>
+
+    <div id="page-monitor" class="page-section flex-1 flex flex-col">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold text-white uppercase border-l-4 border-cyan-500 pl-3">Dashboard Monitoring</h2>
+            <button onclick="downloadCSV()" class="text-xs bg-slate-800 hover:bg-slate-700 text-green-400 border border-slate-600 px-3 py-2 rounded font-bold transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
+                <i class="fa-solid fa-file-csv"></i> DOWNLOAD CSV 
+            </button>
+        </div>
+
+        <div class="relative z-20 grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 flex-1">
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="panel p-6 relative overflow-hidden group rounded-lg">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fa-solid fa-temperature-half text-9xl"></i></div>
+                        <h3 class="text-cyan-500 text-xs font-bold uppercase tracking-widest mb-2 border-l-4 border-cyan-500 pl-2">Suhu Aktual x(t)</h3>
+                        <div class="flex items-end gap-2 mt-4">
+                            <span id="tempVal" class="text-6xl font-bold text-white tracking-tighter">--.-</span>
+                            <span class="text-2xl text-slate-500 mb-2">°C</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1 mt-4 relative overflow-hidden rounded">
+                            <div id="tempBar" class="absolute top-0 left-0 h-full bg-cyan-500 transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="panel p-6 relative overflow-hidden group rounded-lg">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fa-solid fa-gauge-high text-9xl"></i></div>
+                        <h3 class="text-yellow-500 text-xs font-bold uppercase tracking-widest mb-2 border-l-4 border-yellow-500 pl-2">Laju dx/dt</h3>
+                        <div class="flex items-end gap-2 mt-4">
+                            <span id="rateVal" class="text-6xl font-bold text-white tracking-tighter">--.-</span>
+                            <span class="text-2xl text-slate-500 mb-2">°C/s</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1 mt-4 relative overflow-hidden rounded">
+                            <div id="rateBar" class="absolute top-0 left-0 h-full bg-yellow-500 transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel p-4 flex-1 flex flex-col rounded-lg">
+                    <div class="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
+                        <h3 class="text-slate-400 text-xs font-bold uppercase tracking-widest">REAL-TIME TELEMETRY</h3>
+                        <div class="flex gap-4 text-[10px]">
+                            <span class="flex items-center gap-1 text-cyan-400"><span class="w-3 h-1 bg-cyan-400"></span> Suhu (Kiri)</span>
+                            <span class="flex items-center gap-1 text-yellow-500"><span class="w-3 h-1 bg-yellow-500 border border-yellow-500 border-dashed"></span> Laju (Kanan)</span>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-[350px] min-h-[350px]">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1 flex flex-col gap-6">
+                <div class="panel p-6 flex flex-col items-center justify-center text-center bg-slate-800/50 min-h-[250px] rounded-lg" id="statusPanel">
+                    <h3 class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-6">STATUS KEPUTUSAN</h3>
+                    <div id="statusIndicator" class="text-green-500 text-8xl mb-4"><i class="fa-solid fa-shield-halved"></i></div>
+                    <div id="statusText" class="text-4xl font-bold text-white tracking-widest">OFFLINE</div>
+                </div>
+                <div class="panel p-4 flex-1 flex flex-col min-h-[300px] rounded-lg">
+                    <h3 class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3 border-b border-slate-700 pb-2 flex justify-between">
+                        <span>SYSTEM LOGS</span><i class="fa-solid fa-list-ul"></i>
+                    </h3>
+                    <div id="logContainer" class="flex-1 overflow-y-auto space-y-2 font-mono text-xs pr-2">
+                        <div class="text-slate-600 italic">Menunggu koneksi serial...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-rumus" class="page-section hidden-page flex-1 w-full container mx-auto max-w-4xl animate-fade-in">
+        <h2 class="text-3xl font-bold text-white mb-6 uppercase tracking-widest border-b border-slate-700 pb-4">
+            <i class="fa-solid fa-square-root-variable text-yellow-500 mr-2"></i> Implementasi Kalkulus
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="panel p-6 rounded-lg">
+                <h3 class="text-cyan-400 font-bold mb-3 text-lg">1. Fungsi Suhu (Variabel)</h3>
+                <p class="text-slate-400 text-sm mb-4">Suhu didefinisikan sebagai fungsi yang berubah terhadap waktu:</p>
+                <div class="math-box">x = f(t)</div>
+            </div>
+            <div class="panel p-6 rounded-lg">
+                <h3 class="text-yellow-500 font-bold mb-3 text-lg">2. Turunan (Laju)</h3>
+                <p class="text-slate-400 text-sm mb-4">Deteksi cepat menggunakan turunan pertama:</p>
+                <div class="math-box">v(t) = dx/dt</div>
+                <div class="mt-2 text-xs text-slate-500">Mendeteksi seberapa cepat suhu naik per detik.</div>
+            </div>
+        </div>
+
+        <div class="panel p-8 rounded-lg border-t-4 border-green-500">
+            <h3 class="text-green-400 font-bold mb-4 text-xl"><i class="fa-solid fa-list-ol mr-2"></i> 3. Contoh Perhitungan Nyata</h3>
+            
+            <div class="bg-slate-900/50 p-6 rounded-lg border border-slate-700 font-mono text-sm space-y-6">
+                <div>
+                    <p class="text-slate-300 mb-2">Misalkan sistem berjalan dan sensor membaca data berikut:</p>
+                    <ul class="list-disc pl-5 text-slate-400 space-y-1">
+                        <li><span class="text-cyan-400 font-bold">Detik ke-0:</span> Sensor membaca suhu <strong>30.0°C</strong> (Disimpan sbg <em>suhuSebelumnya</em>).</li>
+                        <li><span class="text-yellow-400 font-bold">Detik ke-2:</span> Kamu mendekatkan api. Sensor membaca <strong>34.0°C</strong> (Ini <em>suhuSekarang</em>).</li>
+                    </ul>
+                </div>
+
+                <div class="space-y-4 border-t border-slate-800 pt-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-600">1</div>
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase">Hitung Perubahan Suhu (Δx)</p>
+                            <p class="text-lg text-white">34.0 - 30.0 = <span class="text-cyan-400 font-bold">4.0 °C</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-600">2</div>
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase">Hitung Perubahan Waktu (Δt)</p>
+                            <p class="text-lg text-white">2 - 0 = <span class="text-slate-300 font-bold">2 detik</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-600">3</div>
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase">Hitung Laju (dx/dt)</p>
+                            <p class="text-lg text-white">4.0 / 2 = <span class="text-yellow-400 font-bold text-xl">2.0 °C/detik</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 p-4 bg-red-900/20 border-l-4 border-red-500 rounded">
+                    <p class="text-slate-300 leading-relaxed">
+                        <strong>KESIMPULAN:</strong> Laju perubahan suhu adalah <span class="text-white font-bold">2.0 °C/detik</span>.<br><br>
+                        
+                        <i class="fa-solid fa-circle-info text-cyan-400 mr-1"></i> <strong>Logika Sistem:</strong><br>
+                        Di dalam kodingan Arduino, kita menetapkan <strong>Batas Aman (Threshold)</strong> misalnya sebesar <span class="text-yellow-400 font-bold">1.0 °C/detik</span> (atau 0.70 sesuai sensitivitas sensor).<br><br>
+                        
+                        Karena <span class="text-white font-bold">2.0</span> > <span class="text-yellow-400 font-bold">1.0</span>, maka sistem mendeteksi ini sebagai <strong>"Kenaikan Tidak Wajar"</strong>. Logika alarm menjadi <span class="text-red-500 font-bold">TRUE</span> dan buzzer berbunyi.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-kasus" class="page-section hidden-page flex-1 w-full container mx-auto max-w-5xl animate-fade-in">
+        <h2 class="text-3xl font-bold text-white mb-6 uppercase tracking-widest border-b border-slate-700 pb-4">
+            <i class="fa-solid fa-industry text-green-500 mr-2"></i> Contoh Penggunaan & Skenario
+        </h2>
+        <p class="text-slate-400 text-sm mb-6">Klik salah satu kartu di bawah untuk melihat simulasi grafiknya.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div onclick="renderScenario('server')" id="card-server" class="panel scenario-card p-6 rounded-lg border-t-4 border-cyan-500 active-scenario">
+                <div class="text-cyan-400 text-4xl mb-4"><i class="fa-solid fa-server"></i></div>
+                <h3 class="text-white font-bold mb-2">Ruang Server</h3>
+                <p class="text-xs text-slate-400">Overheat komponen elektronik. Lonjakan suhu sangat tajam dalam hitungan detik.</p>
+            </div>
+            <div onclick="renderScenario('kimia')" id="card-kimia" class="panel scenario-card p-6 rounded-lg border-t-4 border-yellow-500">
+                <div class="text-yellow-500 text-4xl mb-4"><i class="fa-solid fa-flask"></i></div>
+                <h3 class="text-white font-bold mb-2">Gudang Kimia</h3>
+                <p class="text-xs text-slate-400">Reaksi eksotermik. Suhu naik stabil namun cepat sebelum terjadi ledakan.</p>
+            </div>
+            <div onclick="renderScenario('dapur')" id="card-dapur" class="panel scenario-card p-6 rounded-lg border-t-4 border-red-500">
+                <div class="text-red-500 text-4xl mb-4"><i class="fa-solid fa-kitchen-set"></i></div>
+                <h3 class="text-white font-bold mb-2">Smart Kitchen</h3>
+                <p class="text-xs text-slate-400">Membedakan panas memasak (fluktuatif) vs minyak terbakar (eksponensial).</p>
+            </div>
+        </div>
+
+        <div class="panel p-8 rounded-lg transition-all duration-500">
+            <h4 id="scenarioTitle" class="text-xl text-white font-bold mb-2 border-l-4 border-white pl-3">
+                Analisa: Ruang Server
+            </h4>
+            <p id="scenarioDesc" class="text-sm text-slate-300 mb-6">
+                Grafik menunjukkan kenaikan suhu normal vs kejadian bahaya.
+            </p>
+            
+            <div class="w-full bg-slate-900 border-2 border-dashed border-slate-700 rounded-lg p-4 flex flex-col items-center justify-center min-h-[350px]">
+                <div class="relative w-full h-[300px]">
+                    <canvas id="scenarioChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-tutorial" class="page-section hidden-page flex-1 w-full container mx-auto max-w-4xl animate-fade-in">
+        <h2 class="text-3xl font-bold text-white mb-6 uppercase tracking-widest border-b border-slate-700 pb-4">
+            <i class="fa-brands fa-youtube text-red-500 mr-2"></i> Panduan Penggunaan
+        </h2>
+        <div class="panel p-6 rounded-lg">
+            <div class="aspect-w-16 aspect-h-9 w-full bg-black rounded-lg overflow-hidden border border-slate-700 shadow-2xl mb-6">
+                <iframe class="w-full h-[400px]" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="Video Panduan" frameborder="0" allowfullscreen></iframe>
+            </div>
+        </div>
+    </div>
+
+    <footer class="mt-auto w-full py-4 text-center border-t border-slate-800 bg-[#050b14] relative z-20">
+        <p class="text-[10px] text-slate-600 font-mono tracking-wide">
+            <i class="fa-solid fa-circle-info mr-1"></i> Sistem ini hanyalah prototype dan dapat membuat kesalahan.
+        </p>
+    </footer>
+
+    <div id="guideModal" class="fixed inset-0 z-[9999] hidden flex items-center justify-center bg-black/80 backdrop-blur-sm transition-all opacity-0">
+        <div class="panel w-11/12 md:w-2/3 lg:w-1/2 max-h-[80vh] flex flex-col relative border-cyan-500/50 shadow-[0_0_50px_rgba(6,182,212,0.2)] scale-95 transition-transform duration-300">
+            <div class="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                <h2 class="text-cyan-400 text-xl font-bold uppercase tracking-widest"><i class="fa-solid fa-desktop mr-2"></i> PANDUAN WEBSITE</h2>
+                <button onclick="toggleModal('guideModal')" style="cursor: pointer;" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto text-slate-300 space-y-6 font-mono text-sm leading-relaxed">
+                <div>
+                    <h3 class="text-white font-bold mb-2 border-l-4 border-cyan-500 pl-2">01. PERSIAPAN AWAL</h3>
+                    <ul class="list-disc pl-5 space-y-1 text-slate-400">
+                        <li>Pastikan alat detektor (Arduino) sudah <strong>menyala</strong>.</li>
+                        <li>Sambungkan kabel USB Arduino ke Laptop/PC.</li>
+                        <li>Gunakan browser <strong>Google Chrome</strong>.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-white font-bold mb-2 border-l-4 border-cyan-500 pl-2">02. CARA MENGHUBUNGKAN</h3>
+                    <ol class="list-decimal pl-5 space-y-1 text-slate-400">
+                        <li>Klik tombol <span class="text-cyan-400 border border-cyan-500/30 px-1 text-[10px]">HUBUNGKAN PERANGKAT</span>.</li>
+                        <li>Pilih port (COM) Arduino pada jendela pop-up.</li>
+                        <li>Klik <strong>Connect</strong>.</li>
+                    </ol>
+                </div>
+                <div>
+                    <h3 class="text-white font-bold mb-2 border-l-4 border-cyan-500 pl-2">03. MEMBACA MONITOR</h3>
+                    <ul class="list-disc pl-5 mt-2 space-y-1 text-slate-400">
+                        <li><strong>x(t):</strong> Variabel suhu ruangan saat ini.</li>
+                        <li><strong>dx/dt:</strong> Laju kenaikan suhu (Turunan).</li>
+                        <li><strong>Status:</strong> MERAH jika indikasi kebakaran terdeteksi.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-700 bg-slate-900/50 text-right">
+                <button onclick="toggleModal('guideModal')" style="cursor: pointer;" class="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2 text-sm font-bold uppercase tracking-wider clip-path-polygon transition-all">SAYA MENGERTI</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showPage(pageId) {
+            document.querySelectorAll('.page-section').forEach(el => el.classList.add('hidden-page'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('page-' + pageId).classList.remove('hidden-page');
+            document.getElementById('btn-' + pageId).classList.add('active');
+            if(pageId === 'kasus') renderScenario('server');
+        }
+
+        function toggleModal(modalId) {
+            const modal = document.getElementById(modalId);
+            const panel = modal.querySelector('.panel');
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                setTimeout(() => { modal.classList.remove('opacity-0'); panel.classList.remove('scale-95'); panel.classList.add('scale-100'); }, 10);
+            } else {
+                modal.classList.add('opacity-0'); panel.classList.remove('scale-100'); panel.classList.add('scale-95');
+                setTimeout(() => { modal.classList.add('hidden'); }, 300);
+            }
+        }
+        window.onclick = function(event) { if (event.target.id === 'guideModal') toggleModal('guideModal'); }
+
+        // --- SCENARIO CHART LOGIC ---
+        let scenarioChartInstance = null;
+
+        function renderScenario(type) {
+            document.querySelectorAll('.scenario-card').forEach(el => el.classList.remove('active-scenario'));
+            document.getElementById('card-' + type).classList.add('active-scenario');
+
+            const labels = ['0s', '5s', '10s', '15s', '20s', '25s', '30s'];
+            let tempData = [], rateData = [], title = "", desc = "", color = "";
+
+            if (type === 'server') {
+                title = "Analisa: Ruang Server (Short Circuit)";
+                desc = "Lonjakan tajam (Spike). Suhu melesat naik, Laju (dx/dt) sangat tinggi.";
+                tempData = [24, 25, 26, 45, 60, 68, 75];
+                rateData = [0.1, 0.2, 0.3, 4.0, 3.5, 1.2, 0.8];
+                color = '#06b6d4';
+            } else if (type === 'kimia') {
+                title = "Analisa: Gudang Kimia (Reaksi Eksoterm)";
+                desc = "Kenaikan eksponensial. Laju (dx/dt) terus meningkat seiring waktu.";
+                tempData = [28, 30, 33, 38, 48, 65, 85];
+                rateData = [0.2, 0.4, 0.8, 1.5, 2.5, 3.5, 4.0];
+                color = '#eab308';
+            } else if (type === 'dapur') {
+                title = "Analisa: Smart Kitchen (Minyak Terbakar)";
+                desc = "Fluktuatif (memasak) lalu naik drastis (titik nyala).";
+                tempData = [30, 35, 32, 36, 40, 80, 95];
+                rateData = [0.5, -0.3, 0.8, 0.6, 1.0, 5.0, 3.0];
+                color = '#ef4444';
+            }
+
+            document.getElementById('scenarioTitle').innerText = title;
+            document.getElementById('scenarioTitle').style.borderColor = color;
+            document.getElementById('scenarioDesc').innerText = desc;
+
+            const ctxScenario = document.getElementById('scenarioChart').getContext('2d');
+            if (scenarioChartInstance) { scenarioChartInstance.destroy(); }
+
+            scenarioChartInstance = new Chart(ctxScenario, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Suhu (°C)', data: tempData, borderColor: color, backgroundColor: color + '20', yAxisID: 'y', borderWidth: 3, tension: 0.4, fill: true },
+                        { label: 'Laju (dx/dt)', data: rateData, borderColor: '#ffffff', borderDash: [5,5], yAxisID: 'y1', borderWidth: 2, tension: 0.1 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        y: { position: 'left', grid: { color: '#334155' }, title: { display: true, text: 'Suhu' } },
+                        y1: { position: 'right', grid: { display: false }, title: { display: true, text: 'Laju' } },
+                        x: { grid: { color: '#334155' } }
+                    },
+                    plugins: { legend: { labels: { color: 'white' } } }
+                }
+            });
+        }
+
+        // --- REAL-TIME CHART LOGIC ---
+        let port, reader;
+        let isAlarmActive = false;
+        let dataHistory = { time: [], temp: [], rate: [] };
+        
+        let lastRecordTime = 0; // TIMER CSV
+        const RECORD_INTERVAL = 5000; // 5 Detik
+
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: { 
+                labels: [], 
+                datasets: [
+                    { label: 'x (Suhu)', borderColor: '#06b6d4', data: [], borderWidth: 2, tension: 0.4, yAxisID: 'y' }, 
+                    { label: 'dx/dt (Laju)', borderColor: '#eab308', data: [], borderWidth: 2, borderDash: [4, 4], tension: 0.1, yAxisID: 'y1' }
+                ] 
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false, animation: false, 
+                scales: { 
+                    x: { display: true, grid: { color: '#1e293b' } }, 
+                    y: { position: 'left', min: 20, max: 70, grid: { color: '#1e293b' }, title: {display: true, text: 'Suhu (°C)'} }, 
+                    y1: { position: 'right', min: -2, max: 6, grid: { display: false }, title: {display: true, text: 'Laju (°C/s)'} } 
+                }, 
+                plugins: { legend: { display: true, labels: { color: '#94a3b8' } } } 
+            }
+        });
+
+        // DOWNLOAD CSV (FIX)
+        function downloadCSV() {
+            if (dataHistory.time.length === 0) { alert("Belum ada data terekam!"); return; }
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFFWaktu;Suhu (x);Laju (dx/dt)\n";
+            for (let i = 0; i < dataHistory.time.length; i++) { 
+                csvContent += `${dataHistory.time[i]};${dataHistory.temp[i]};${dataHistory.rate[i]}\n`; 
+            }
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "data_monitoring_kelompok7.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // SERIAL CONNECTION LOGIC
+        if ("serial" in navigator) { navigator.serial.addEventListener("disconnect", () => showOfflineOverlay()); }
+
+        function showOfflineOverlay() {
+            const overlay = document.getElementById('offlineOverlay');
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            addLog("CRITICAL", "DEVICE DISCONNECTED!");
+        }
+
+        async function connectSerial() {
+            if ("serial" in navigator) {
+                try {
+                    port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: 9600 });
+                    document.getElementById('btnText').innerText = "TERHUBUNG";
+                    document.getElementById('connectBtn').classList.replace('text-cyan-400', 'text-green-400');
+                    document.getElementById('connectBtn').classList.replace('border-cyan-500/50', 'border-green-500/50');
+                    addLog("INFO", "Koneksi Stabil.");
+                    const textDecoder = new TextDecoderStream();
+                    port.readable.pipeTo(textDecoder.writable);
+                    reader = textDecoder.readable.getReader();
+                    readLoop();
+                } catch (err) { console.error(err); }
+            } else { alert("Gunakan Chrome/Edge di Laptop."); }
+        }
+
+        async function readLoop() {
+            let buffer = "";
+            while (true) {
+                try {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        buffer += value;
+                        let lines = buffer.split('\n');
+                        buffer = lines.pop();
+                        for (const line of lines) {
+                            try { const clean = line.trim(); if (clean.startsWith('{')) updateDashboard(JSON.parse(clean)); } catch (e) {}
+                        }
+                    }
+                } catch (e) { showOfflineOverlay(); break; }
+            }
+        }
+
+        function updateDashboard(data) {
+            document.getElementById('tempVal').innerText = data.s.toFixed(1);
+            document.getElementById('rateVal').innerText = data.r.toFixed(2);
+            let tempPer = Math.min(100, Math.max(0, ((data.s - 20) / 40) * 100));
+            let ratePer = Math.min(100, Math.max(0, (data.r / 2) * 100));
+            document.getElementById('tempBar').style.width = tempPer + "%";
+            document.getElementById('rateBar').style.width = ratePer + "%";
+            
+            const statusText = document.getElementById('statusText');
+            const statusIcon = document.getElementById('statusIndicator');
+            const body = document.getElementById('mainBody');
+
+            if (data.a == 1) {
+                if (!isAlarmActive) { addLog("ALERT", `ANOMALI! x=${data.s}, dx/dt=${data.r}`); isAlarmActive = true; }
+                statusText.innerText = "BAHAYA";
+                statusText.className = "text-4xl font-bold text-red-500 tracking-widest animate-pulse";
+                statusIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+                statusIcon.className = "text-red-500 text-8xl mb-4 animate-bounce";
+                body.classList.add('alarm-active');
+            } else {
+                if (isAlarmActive) { addLog("INFO", "Sistem stabil."); isAlarmActive = false; }
+                statusText.innerText = "AMAN";
+                statusText.className = "text-4xl font-bold text-green-500 tracking-widest";
+                statusIcon.innerHTML = '<i class="fa-solid fa-shield-check"></i>';
+                statusIcon.className = "text-green-500 text-8xl mb-4";
+                body.classList.remove('alarm-active');
+            }
+
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // --- LOGIKA REKAM CSV (Setiap 5 Detik) ---
+            const now = Date.now();
+            if (now - lastRecordTime >= RECORD_INTERVAL) {
+                dataHistory.time.push(timestamp);
+                dataHistory.temp.push(data.s);
+                dataHistory.rate.push(data.r);
+                lastRecordTime = now;
+            }
+            
+            chart.data.labels.push(timestamp); 
+            if (chart.data.labels.length > 30) { 
+                chart.data.labels.shift(); 
+                chart.data.datasets.forEach(ds => ds.data.shift()); 
+            }
+            chart.data.datasets[0].data.push(data.s);
+            chart.data.datasets[1].data.push(data.r);
+            chart.update();
+        }
+
+        function addLog(type, msg) {
+            const container = document.getElementById('logContainer');
+            const time = new Date().toLocaleTimeString();
+            let color = type === "ALERT" ? "text-red-400" : (type === "INFO" ? "text-green-400" : "text-cyan-400");
+            container.innerHTML = `<div class="border-l-2 border-slate-700 pl-2 py-1 ${type === "ALERT" ? "bg-red-900/10" : ""}"><span class="text-slate-500">[${time}]</span> <span class="${color} font-bold">${type}:</span> <span class="text-slate-300">${msg}</span></div>` + container.innerHTML;
+        }
+    </script>
+</body>
+</html>
