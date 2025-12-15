@@ -558,7 +558,7 @@
                 if (isAlarmActive) { addLog("INFO", "Sistem stabil."); isAlarmActive = false; }
                 statusText.innerText = "AMAN";
                 statusText.className = "text-4xl font-bold text-green-500 tracking-widest";
-                statusIcon.innerHTML = '<i class="fa-solid fa-shield-check"></i>';
+                statusIcon.innerHTML = '<i class="fa-solid fa-shield"></i>'; // FIX ICON DISINI (GANTI JADI FA-SHIELD)
                 statusIcon.className = "text-green-500 text-8xl mb-4";
                 body.classList.remove('alarm-active');
             }
